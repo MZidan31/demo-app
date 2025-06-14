@@ -4,14 +4,13 @@ podTemplate(
     containerTemplate(
       name: 'docker',
       image: 'jenkins-agent-docker:latest',
-      command: 'cat', ttyEnabled: true,
-      volumeMounts: [
-        hostPathVolume(hostPath: '/var/run/docker.sock', mountPath: '/var/run/docker.sock')
-      ]
+      command: 'cat',
+      ttyEnabled: true
+      // jangan pakai volumeMounts di sini
     )
   ],
   volumes: [
-    hostPathVolume(hostPath: '/var/run/docker.sock', mountPath: '/var/run/docker.sock')
+    hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock')
   ]
 ) {
   node('docker-agent-full') {
