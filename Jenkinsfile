@@ -14,18 +14,22 @@ pipeline {
     stage('Build & Load Image') {
       steps {
         script {
-          docker.build("mzidan/demo-app:${env.BUILD_ID}")
-          sh "minikube image load mzidan/demo-app:${env.BUILD_ID}"
+          sh """
+            docker build -t mzidan/demo-app:${env.BUILD_ID} .
+            minikube image load mzidan/demo-app:${env.BUILD_ID}
+          """
         }
       }
     }
 
     stage('Push to DockerHub') {
       steps {
-        script {
-          docker.withRegistry('', 'dockerhub-id') {
-            docker.image("mzidan/demo-app:${env.BUILD_ID}").push('latest')
-          }
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-id', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh """
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker tag mzidan/demo-app:${env.BUILD_ID} mzidan/demo-app:latest
+            docker push mzidan/demo-app:latest
+          """
         }
       }
     }
@@ -43,7 +47,7 @@ pipeline {
         }
       }
     }
-  } // <--- penutup stages
+  }
 
   post {
     success {
