@@ -1,5 +1,26 @@
 pipeline {
-  agent any
+  agent {
+    kubernetes {
+      label 'docker-agent'
+      defaultContainer 'docker'
+      yaml """
+spec:
+  containers:
+  - name: docker
+    image: jenkins-agent-docker:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+    }
+  }
   environment {
     DOCKERHUB_CREDS = credentials('dockerhub-id')
     KUBECONFIG = credentials('kubeconfig-minikube')
@@ -7,54 +28,37 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        git url: 'https://github.com/MZidan31/demo-app.git', branch: 'main'
+        git 'https://github.com/MZidan31/demo-app.git'
       }
     }
-
     stage('Build & Load Image') {
       steps {
-        script {
-          sh """
-            docker build -t mzidan/demo-app:${env.BUILD_ID} .
-            minikube image load mzidan/demo-app:${env.BUILD_ID}
-          """
-        }
+        sh '''
+          docker --version
+          docker build -t mzidan/demo-app:${BUILD_ID} .
+          minikube image load mzidan/demo-app:${BUILD_ID}
+        '''
       }
     }
-
     stage('Push to DockerHub') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-id', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          sh """
-            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-            docker tag mzidan/demo-app:${env.BUILD_ID} mzidan/demo-app:latest
-            docker push mzidan/demo-app:latest
-          """
+        script {
+          docker.withRegistry('', 'dockerhub-id') {
+            docker.image("mzidan/demo-app:${BUILD_ID}").push('latest')
+          }
         }
       }
     }
-
     stage('Helm Deploy') {
       steps {
         withCredentials([file(credentialsId: 'kubeconfig-minikube', variable: 'KUBECONFIG')]) {
           sh """
             helm upgrade --install demo-app helm-chart \
               --namespace demo --create-namespace \
-              --set image.repository=mzidan/demo-app \
-              --set image.tag=${env.BUILD_ID} \
-              --set service.nodePort=30080
+              --set image.tag=${BUILD_ID}
           """
         }
       }
-    }
-  }
-
-  post {
-    success {
-      echo '✅ Pipeline completed successfully!'
-    }
-    failure {
-      echo '❌ Pipeline failed!'
     }
   }
 }
