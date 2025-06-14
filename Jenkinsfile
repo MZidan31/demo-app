@@ -10,6 +10,7 @@ pipeline {
         git url: 'https://github.com/MZidan31/demo-app.git', branch: 'main'
       }
     }
+
     stage('Build & Load Image') {
       steps {
         script {
@@ -18,6 +19,7 @@ pipeline {
         }
       }
     }
+
     stage('Push to DockerHub') {
       steps {
         script {
@@ -27,6 +29,7 @@ pipeline {
         }
       }
     }
+
     stage('Helm Deploy') {
       steps {
         withCredentials([file(credentialsId: 'kubeconfig-minikube', variable: 'KUBECONFIG')]) {
@@ -40,9 +43,14 @@ pipeline {
         }
       }
     }
-    post {
-      success { echo '✅ Pipeline completed successfully!' }
-      failure { echo '❌ Pipeline failed!' }
+  } // <--- penutup stages
+
+  post {
+    success {
+      echo '✅ Pipeline completed successfully!'
+    }
+    failure {
+      echo '❌ Pipeline failed!'
     }
   }
 }
