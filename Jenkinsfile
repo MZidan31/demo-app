@@ -4,8 +4,6 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
-  securityContext:
-    runAsUser: 0
   containers:
   - name: docker
     image: masjidan/jenkins-agent-docker:latest
@@ -21,39 +19,30 @@ spec:
 """
 ) {
   node('ci-with-docker') {
+    stage('Checkout') {
+      checkout scm
+    }
+
     stage('Build & Push Image') {
       container('docker') {
-        sh '''
-          echo "[INFO] Show Docker version:"
-          docker version
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh '''
+            echo [INFO] Show Docker version:
+            docker version
 
-          echo "[INFO] Build Docker image..."
-          docker build -t masjidan/demo-app:${BUILD_ID} .
+            echo [INFO] Build Docker image...
+            docker build -t masjidan/demo-app:${BUILD_ID} .
 
-          echo "[INFO] Docker login"
-          echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+            echo [INFO] Login to DockerHub...
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-          echo "[INFO] Push Docker image..."
-          docker push masjidan/demo-app:${BUILD_ID}
-        '''
-      }
-    }
+            echo [INFO] Push Docker image...
+            docker push masjidan/demo-app:${BUILD_ID}
 
-    stage('Load to Minikube') {
-      container('docker') {
-        sh '''
-          echo "[INFO] Load image to Minikube (for local testing)..."
-          minikube image load masjidan/demo-app:${BUILD_ID}
-        '''
-      }
-    }
-
-    stage('Deploy with Helm') {
-      container('docker') {
-        sh '''
-          echo "[INFO] Deploy using Helm..."
-          helm upgrade --install demo-app ./helm-chart --set image.tag=${BUILD_ID}
-        '''
+            echo [INFO] Load to Minikube (optional)...
+            minikube image load masjidan/demo-app:${BUILD_ID}
+          '''
+        }
       }
     }
   }
