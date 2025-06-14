@@ -4,13 +4,8 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
-  initContainers:
-  - name: fix-docker-perm
-    image: busybox
-    command: ['sh', '-c', 'addgroup -g 999 docker; adduser jenkins docker || true']
-    volumeMounts:
-      - name: dockersock
-        mountPath: /var/run/docker.sock
+  securityContext:
+    runAsUser: 0
   containers:
   - name: docker
     image: masjidan/jenkins-agent-docker:latest
@@ -26,40 +21,40 @@ spec:
 """
 ) {
   node('ci-with-docker') {
-
-    stage('Build Image') {
+    stage('Build & Push Image') {
       container('docker') {
         sh '''
           echo "[INFO] Show Docker version:"
           docker version
 
-          echo "[INFO] Build image:"
+          echo "[INFO] Build Docker image..."
           docker build -t masjidan/demo-app:${BUILD_ID} .
 
-          echo "[INFO] Load image into Minikube:"
+          echo "[INFO] Docker login"
+          echo "${DOCKER_HUB_PASSWORD}" | docker login -u "${DOCKER_HUB_USERNAME}" --password-stdin
+
+          echo "[INFO] Push Docker image..."
+          docker push masjidan/demo-app:${BUILD_ID}
+        '''
+      }
+    }
+
+    stage('Load to Minikube') {
+      container('docker') {
+        sh '''
+          echo "[INFO] Load image to Minikube (for local testing)..."
           minikube image load masjidan/demo-app:${BUILD_ID}
         '''
       }
     }
 
-    stage('Push to DockerHub') {
+    stage('Deploy with Helm') {
       container('docker') {
-        withCredentials([usernamePassword(
-          credentialsId: 'dockerhub-credentials', 
-          usernameVariable: 'DOCKER_USER', 
-          passwordVariable: 'DOCKER_PASS'
-        )]) {
-          sh '''
-            echo "[INFO] Login ke DockerHub:"
-            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-            echo "[INFO] Push image ke DockerHub:"
-            docker push masjidan/demo-app:${BUILD_ID}
-          '''
-        }
+        sh '''
+          echo "[INFO] Deploy using Helm..."
+          helm upgrade --install demo-app ./helm-chart --set image.tag=${BUILD_ID}
+        '''
       }
     }
-
-    // Tambahkan stage deploy ke Helm/Kubernetes kalau mau
   }
 }
