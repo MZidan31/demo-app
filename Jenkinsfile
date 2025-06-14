@@ -2,6 +2,7 @@ pipeline {
   agent {
     kubernetes {
       label 'ci-with-docker'
+      defaultContainer 'docker'
       yaml """
 apiVersion: v1
 kind: Pod
@@ -34,8 +35,8 @@ spec:
   }
 
   environment {
-    DOCKER_USER = credentials('dockerhub-username') // harus sudah ada
-    DOCKER_PASS = credentials('dockerhub-password') // harus sudah ada
+    IMAGE_NAME = "masjidan/demo-app"
+    IMAGE_TAG = "latest"
   }
 
   stages {
@@ -48,7 +49,11 @@ spec:
     stage('Build & Push Image') {
       steps {
         container('docker') {
-          withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          withCredentials([usernamePassword(
+            credentialsId: 'docker-hub-credentials',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )]) {
             sh '''
               echo "[INFO] Docker Version:"
               docker version
@@ -56,11 +61,11 @@ spec:
               echo "[INFO] Login Docker Hub"
               echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-              echo "[INFO] Build Image"
-              docker build -t $DOCKER_USER/demo-app:latest .
+              echo "[INFO] Build image"
+              docker build -t $IMAGE_NAME:$IMAGE_TAG .
 
-              echo "[INFO] Push Image"
-              docker push $DOCKER_USER/demo-app:latest
+              echo "[INFO] Push image"
+              docker push $IMAGE_NAME:$IMAGE_TAG
             '''
           }
         }
