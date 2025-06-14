@@ -13,6 +13,7 @@ spec:
   containers:
     - name: docker
       image: masjidan/jenkins-agent-docker:root
+      imagePullPolicy: IfNotPresent
       command:
         - cat
       tty: true
@@ -23,6 +24,12 @@ spec:
           mountPath: /var/run/docker.sock
         - name: workspace-volume
           mountPath: /home/jenkins/agent
+    - name: helm
+      image: lachlanevenson/k8s-helm:latest
+      imagePullPolicy: IfNotPresent
+      command:
+        - cat
+      tty: true
   volumes:
     - name: docker-sock
       hostPath:
@@ -68,6 +75,22 @@ spec:
               docker push $IMAGE_NAME:$IMAGE_TAG
             '''
           }
+        }
+      }
+    }
+
+    stage('Helm Deploy') {
+      steps {
+        container('helm') {
+          sh '''
+            echo "[INFO] Helm Version:"
+            helm version --client
+            echo "[INFO] Deploy with Helm"
+            helm upgrade --install demo-app helm-chart \
+              --namespace demo --create-namespace \
+              --set image.repository=$IMAGE_NAME \
+              --set image.tag=$IMAGE_TAG
+          '''
         }
       }
     }
