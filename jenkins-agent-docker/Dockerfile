@@ -1,10 +1,6 @@
 FROM jenkins/inbound-agent:latest
 USER root
 
-# Biarkan Jenkins user mengakses Docker socket
-RUN groupadd -g 989 docker \
- && usermod -aG docker jenkins
-
 # Pasang Docker CLI
 RUN apt-get update \
  && apt-get install -y curl \
@@ -13,4 +9,5 @@ RUN apt-get update \
  && chmod +x /usr/local/bin/docker \
  && apt-get clean
 
-USER jenkins
+# Tetap sebagai root untuk akses docker.sock
+USER root
