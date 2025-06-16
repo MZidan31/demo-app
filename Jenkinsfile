@@ -2,40 +2,72 @@ pipeline {
   agent any
 
   environment {
-    DOCKER_IMAGE = 'masjidan/demo-app:latest'
-    DOCKER_CREDENTIALS_ID = 'dockerhub-cred'
+    IMAGE = "masjidan/demo-app"
+    TAG = "latest"
+    DOCKER_CRED = "docker-hub"
+    KUBECONFIG_CRED = "kubeconfig-dev"
+    NAMESPACE = "default"
+    HELM_RELEASE = "demo-app"
   }
 
   stages {
-    stage('Checkout') {
+    stage('Checkout Source Code') {
       steps {
-        git 'https://github.com/MZidan31/demo-app.git' // Ganti jika beda repo
+        git url: 'https://github.com/MZidan31/demo-app.git', branch: 'main'
       }
     }
 
     stage('Build Docker Image') {
       steps {
-        sh 'docker build -t $DOCKER_IMAGE .'
-      }
-    }
-
-    stage('Push to DockerHub') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID", usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-          sh '''
-            echo $PASSWORD | docker login -u $USERNAME --password-stdin
-            docker push $DOCKER_IMAGE
-          '''
+        script {
+          echo "🛠️ Building image ${IMAGE}:${TAG}..."
+          def builtImage = docker.build("${IMAGE}:${TAG}")
         }
       }
     }
 
-    stage('Deploy to Kubernetes with Helm') {
+    stage('Push Docker Image') {
       steps {
-        sh '''
-          helm upgrade --install demo-app ./helm-chart --namespace default --create-namespace
-        '''
+        withCredentials([usernamePassword(
+          credentialsId: "docker-hub",
+          usernameVariable: 'USER',
+          passwordVariable: 'PASS'
+        )]) {
+          script {
+            echo "📦 Pushing image to DockerHub..."
+            sh """
+              echo "$PASS" | docker login -u "$USER" --password-stdin
+              docker push ${IMAGE}:${TAG}
+            """
+          }
+        }
       }
+    }
+
+    stage('Deploy to Kubernetes (Helm)') {
+      steps {
+        withCredentials([file(credentialsId: "${KUBECONFIG_CRED}", variable: 'KUBE_FILE')]) {
+          script {
+            echo "🚀 Deploying to Kubernetes via Helm..."
+            sh '''
+              export KUBECONFIG=$KUBE_FILE
+              helm upgrade --install $HELM_RELEASE ./helm \
+                --set image.repository=$IMAGE \
+                --set image.tag=$TAG \
+                --namespace $NAMESPACE --create-namespace
+            '''
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Pipeline Sukses: Aplikasi berhasil dideploy ke Kubernetes"
+    }
+    failure {
+      echo "❌ Pipeline Gagal: Cek log untuk mengetahui error"
     }
   }
 }
