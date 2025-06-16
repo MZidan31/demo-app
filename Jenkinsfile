@@ -1,97 +1,40 @@
 pipeline {
-  agent {
-    kubernetes {
-      label 'ci-with-docker'
-      defaultContainer 'docker'
-      yaml """
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    some-label: jenkins-agent
-spec:
-  containers:
-    - name: docker
-      image: masjidan/jenkins-agent-docker:root
-      imagePullPolicy: IfNotPresent
-      command:
-        - cat
-      tty: true
-      securityContext:
-        privileged: true
-      volumeMounts:
-        - name: docker-sock
-          mountPath: /var/run/docker.sock
-        - name: workspace-volume
-          mountPath: /home/jenkins/agent
-    - name: helm
-      image: lachlanevenson/k8s-helm:latest
-      imagePullPolicy: IfNotPresent
-      command:
-        - cat
-      tty: true
-  volumes:
-    - name: docker-sock
-      hostPath:
-        path: /var/run/docker.sock
-        type: Socket
-    - name: workspace-volume
-      emptyDir: {}
-"""
-    }
-  }
+  agent any
 
   environment {
-    IMAGE_NAME = "masjidan/demo-app"
-    IMAGE_TAG = "latest"
+    DOCKER_IMAGE = 'masjidan/demo-app:latest'
+    DOCKER_CREDENTIALS_ID = 'dockerhub-cred'
   }
 
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        git 'https://github.com/MZidan31/demo-app.git' // Ganti jika beda repo
       }
     }
 
-    stage('Build & Push Image') {
+    stage('Build Docker Image') {
       steps {
-        container('docker') {
-          withCredentials([usernamePassword(
-            credentialsId: 'docker-hub-credentials',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-          )]) {
-            sh '''
-              echo "[INFO] Docker Version:"
-              docker version
-
-              echo "[INFO] Login Docker Hub"
-              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-              echo "[INFO] Build image"
-              docker build -t $IMAGE_NAME:$IMAGE_TAG .
-
-              echo "[INFO] Push image"
-              docker push $IMAGE_NAME:$IMAGE_TAG
-            '''
-          }
-        }
+        sh 'docker build -t $DOCKER_IMAGE .'
       }
     }
 
-    stage('Helm Deploy') {
+    stage('Push to DockerHub') {
       steps {
-        container('helm') {
+        withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID", usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
           sh '''
-            echo "[INFO] Helm Version:"
-            helm version --client
-            echo "[INFO] Deploy with Helm"
-            helm upgrade --install demo-app helm-chart \
-              --namespace demo --create-namespace \
-              --set image.repository=$IMAGE_NAME \
-              --set image.tag=$IMAGE_TAG
+            echo $PASSWORD | docker login -u $USERNAME --password-stdin
+            docker push $DOCKER_IMAGE
           '''
         }
+      }
+    }
+
+    stage('Deploy to Kubernetes with Helm') {
+      steps {
+        sh '''
+          helm upgrade --install demo-app ./helm-chart --namespace default --create-namespace
+        '''
       }
     }
   }
