@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: demo-app
+  name: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: demo-app
+      app: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: demo-app
+        app: {{ .Release.Name }}
     spec:
       containers:
-      - name: demo-app
+      - name: {{ .Release.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         ports:
-        - containerPort: 5000
+        - containerPort: 80
