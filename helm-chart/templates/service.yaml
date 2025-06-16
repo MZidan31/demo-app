@@ -3,10 +3,10 @@ kind: Service
 metadata:
   name: demo-app
 spec:
-  type: {{ .Values.service.type }}
+  type: NodePort
   selector:
     app: demo-app
   ports:
-    - port: 5000
-      targetPort: 5000
-      nodePort: 30007
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
